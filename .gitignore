@@ -1,0 +1,39 @@
+# Maven
+target/
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# Logs
+logs/
+*.log
+*.log.gz
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Spring Boot
+.mvn/
+mvnw
+mvnw.cmd
+help.md
+
+# Environment Variables / Secrets
+.env

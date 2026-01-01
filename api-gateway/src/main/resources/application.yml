@@ -1,0 +1,95 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+      routes:
+        # --- Service Routes ---
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/users/**
+        
+        - id: credit-scoring-service
+          uri: lb://credit-scoring-service
+          predicates:
+            - Path=/score/**
+        
+        - id: data-collection-service
+          uri: lb://data-collection-service
+          predicates:
+            - Path=/data/**
+        
+        - id: report-service
+          uri: lb://report-service
+          predicates:
+            - Path=/reports/**
+
+        # --- Swagger Documentation Routes ---
+        
+        # User Service Docs
+        - id: user-service-docs
+          uri: lb://user-service
+          predicates:
+            - Path=/v3/api-docs/user-service
+          filters:
+            - RewritePath=/v3/api-docs/user-service, /v3/api-docs
+            
+        # Data Collection Service Docs
+        - id: data-collection-service-docs
+          uri: lb://data-collection-service
+          predicates:
+            - Path=/v3/api-docs/data-collection-service
+          filters:
+            - RewritePath=/v3/api-docs/data-collection-service, /v3/api-docs
+
+        # Credit Scoring Service Docs
+        - id: credit-scoring-service-docs
+          uri: lb://credit-scoring-service
+          predicates:
+            - Path=/v3/api-docs/credit-scoring-service
+          filters:
+            - RewritePath=/v3/api-docs/credit-scoring-service, /v3/api-docs
+
+        # Report Service Docs
+        - id: report-service-docs
+          uri: lb://report-service
+          predicates:
+            - Path=/v3/api-docs/report-service
+          filters:
+            - RewritePath=/v3/api-docs/report-service, /v3/api-docs
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: user-service
+        url: /v3/api-docs/user-service
+      - name: data-collection-service
+        url: /v3/api-docs/data-collection-service
+      - name: credit-scoring-service
+        url: /v3/api-docs/credit-scoring-service
+      - name: report-service
+        url: /v3/api-docs/report-service
