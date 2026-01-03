@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class DataCollectionService {
@@ -22,6 +23,9 @@ public class DataCollectionService {
 
     @Autowired
     private UserClient userClient;
+
+    @Autowired
+    private KafkaProducerService kafkaProducerService;
 
     public List<FinancialData> getAllDataForUser(Long userId) {
         logger.debug("Fetching all financial data for user ID: {}", userId);
@@ -44,18 +48,31 @@ public class DataCollectionService {
     public FinancialData submitData(FinancialData data) {
         logger.info("Submitting new financial data for user ID: {}", data.getUserId());
         validateUserExists(data.getUserId());
-        return financialDataRepository.save(data);
+        FinancialData savedData = financialDataRepository.save(data);
+        
+        // Publish event to Kafka
+        kafkaProducerService.sendDataUpdatedEvent(savedData.getUserId());
+        
+        return savedData;
     }
 
     public List<FinancialData> submitBatchData(List<FinancialData> dataList) {
         logger.info("Submitting batch of {} financial data records.", dataList.size());
+        
         // Validate all users in the batch
-        dataList.stream()
+        List<Long> userIds = dataList.stream()
                 .map(FinancialData::getUserId)
                 .distinct()
-                .forEach(this::validateUserExists);
+                .collect(Collectors.toList());
         
-        return financialDataRepository.saveAll(dataList);
+        userIds.forEach(this::validateUserExists);
+        
+        List<FinancialData> savedData = financialDataRepository.saveAll(dataList);
+        
+        // Publish event for each unique user ID
+        userIds.forEach(kafkaProducerService::sendDataUpdatedEvent);
+        
+        return savedData;
     }
 
     public FinancialData updateData(Long userId, FinancialData newData) {
@@ -67,7 +84,12 @@ public class DataCollectionService {
             throw new RuntimeException("Data not found");
         }
         newData.setUserId(userId);
-        return financialDataRepository.save(newData);
+        FinancialData savedData = financialDataRepository.save(newData);
+        
+        // Publish event to Kafka
+        kafkaProducerService.sendDataUpdatedEvent(savedData.getUserId());
+        
+        return savedData;
     }
 
     public void deleteDataForUser(Long userId) {

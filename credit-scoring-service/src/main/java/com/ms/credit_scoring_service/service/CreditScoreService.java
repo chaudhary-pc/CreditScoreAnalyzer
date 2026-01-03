@@ -7,9 +7,8 @@ import com.ms.credit_scoring_service.repository.CreditScoreRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
-// import org.springframework.cache.annotation.CacheEvict;
-// import org.springframework.cache.annotation.CachePut;
-// import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -27,14 +26,17 @@ public class CreditScoreService {
     @Autowired
     private DataCollectionClient dataCollectionClient;
 
-    // @Cacheable(value = "creditScores", key = "#userId")
+    @Autowired
+    private KafkaProducerService kafkaProducerService;
+
+    @Cacheable(value = "creditScores", key = "#userId")
     public CreditScore getScoreByUserId(Long userId) {
-        logger.debug("Fetching credit score for user ID: {}", userId);
+        logger.debug("Fetching credit score for user ID: {} (Cache Miss)", userId);
         return creditScoreRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Credit score not found for user"));
     }
 
-    // @CacheEvict(value = "creditScores", key = "#userId")
+    @CacheEvict(value = "creditScores", key = "#userId")
     public CreditScore calculateScore(Long userId) {
         logger.info("Calculating credit score for user ID: {}", userId);
         
@@ -63,12 +65,22 @@ public class CreditScoreService {
             creditScore.setScoreHistory(currentHistory + "," + newEntry);
         }
 
-        return creditScoreRepository.save(creditScore);
+        CreditScore savedScore = creditScoreRepository.save(creditScore);
+        
+        // 4. Publish Event to Kafka
+        try {
+            kafkaProducerService.sendScoreCalculatedEvent(userId);
+        } catch (Exception e) {
+            logger.error("Failed to send Kafka event for user ID: {}", userId, e);
+            // Don't fail the whole request if Kafka is down, just log it
+        }
+
+        return savedScore;
     }
 
     private int calculateSimpleScore(List<FinancialDataDto> data) {
         // Dummy Algorithm:
-        
+
         int baseScore = 300;
         BigDecimal totalAmount = BigDecimal.ZERO;
 
@@ -87,7 +99,7 @@ public class CreditScoreService {
         return finalScore;
     }
 
-    // @CacheEvict(value = "creditScores", key = "#userId")
+    @CacheEvict(value = "creditScores", key = "#userId")
     public CreditScore updateScore(Long userId, Integer newScore) {
         logger.info("Manually updating score for user ID: {}", userId);
         CreditScore creditScore = creditScoreRepository.findByUserId(userId)
@@ -97,7 +109,7 @@ public class CreditScoreService {
         return creditScoreRepository.save(creditScore);
     }
 
-    // @CacheEvict(value = "creditScores", key = "#userId")
+    @CacheEvict(value = "creditScores", key = "#userId")
     public void deleteScore(Long userId) {
         logger.warn("Deleting credit score for user ID: {}", userId);
         CreditScore creditScore = creditScoreRepository.findByUserId(userId)
