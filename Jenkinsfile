@@ -3,17 +3,15 @@ pipeline {
 
     environment {
         // Define variables
-        DOCKER_IMAGE = "your-dockerhub-username/user-service"
+        DOCKER_IMAGE = "chaudhary2511/user-service"
         REGISTRY_CRED = "docker-hub-creds"
-        AWS_CRED = "ec2-ssh-key"
-        EC2_IP = "1.2.3.4" // REPLACE WITH YOUR AWS IP
     }
 
     stages {
         // Stage 1: Get the code
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/YOUR_USERNAME/CreditScoreAnalyzer.git'
+                git branch: 'master', url: 'https://github.com/chaudhary-pc/CreditScoreAnalyzer.git'
             }
         }
 
@@ -54,21 +52,13 @@ pipeline {
             }
         }
 
-        // Stage 5: Deploy to AWS
-        stage('Deploy to EC2') {
-            steps {
-                sshagent([AWS_CRED]) {
-                    // We SSH into the server and run commands
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} '
-                            docker pull ${DOCKER_IMAGE}:latest
-                            docker stop user-service || true
-                            docker rm user-service || true
-                            docker run -d --name user-service -p 8081:8081 ${DOCKER_IMAGE}:latest
-                        '
-                    """
-                }
-            }
+    }
+    post {
+        success {
+            echo 'Build and Push Successful! Images are now in Docker Hub.'
+        }
+        failure {
+            echo 'Something went wrong.'
         }
     }
 }
