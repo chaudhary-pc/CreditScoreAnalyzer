@@ -52,13 +52,13 @@ pipeline {
             }
         }
 
-        post {
-            success {
-                echo 'Build and Push Successful! Images are now in Docker Hub.'
-            }
-            failure {
-                echo 'Something went wrong.'
-            }
+    }
+    post {
+        success {
+            echo 'Build and Push Successful! Images are now in Docker Hub.'
+        }
+        failure {
+            echo 'Something went wrong.'
         }
     }
 }
