@@ -11,7 +11,7 @@ pipeline {
         // Stage 1: Get the code
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/chaudhary-pc/CreditScoreAnalyzer.git'
+                git branch: 'master', url: 'https://github.com/chaudhary-pc/CreditScoreAnalyzer.git'
             }
         }
 
