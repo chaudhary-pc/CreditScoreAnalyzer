@@ -29,10 +29,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Spring Boot
-.mvn/
-mvnw
-mvnw.cmd
 help.md
 
 # Environment Variables / Secrets
