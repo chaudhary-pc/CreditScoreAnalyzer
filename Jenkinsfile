@@ -2,63 +2,145 @@ pipeline {
     agent any
 
     environment {
-        // Define variables
-        DOCKER_IMAGE = "chaudhary2511/user-service"
+        DOCKER_HUB_USER = "your-dockerhub-username"
         REGISTRY_CRED = "docker-hub-creds"
+        AWS_CRED = "ec2-ssh-key"
+        EC2_IP = "1.2.3.4"
+        // We need to pass the username to the docker-compose file on the server
+        COMPOSE_PROJECT_NAME = "credit-score"
     }
 
     stages {
-        // Stage 1: Get the code
         stage('Checkout') {
             steps {
-                git branch: 'master', url: 'https://github.com/chaudhary-pc/CreditScoreAnalyzer.git'
+                git branch: 'main', url: 'https://github.com/YOUR_USERNAME/CreditScoreAnalyzer.git'
             }
         }
 
-        // Stage 2: Compile Java
-        stage('Build JAR') {
+		// --- SERVICE 1: USER SERVICE ---
+        stage('Build User Service') {
             steps {
-                // We use the Maven Wrapper included in your project
-                // 'sh' is for Linux/Mac, 'bat' is for Windows.
-                // Since Jenkins is running in Linux container, use 'sh'
                 dir('user-service') {
+                    // 1. Compile Java
                     sh 'chmod +x mvnw'
                     sh './mvnw clean package -DskipTests'
-                }
-            }
-        }
 
-        // Stage 3: Build Docker Image
-        stage('Build Image') {
-            steps {
-                dir('user-service') {
+                    // 2. Build & Push Docker Image
                     script {
-                        // Uses the Docker plugin to build
-                        docker.build("${DOCKER_IMAGE}:latest")
+                        docker.withRegistry('', REGISTRY_CRED) {
+                            def img = docker.build("${DOCKER_HUB_USER}/user-service:latest")
+                            img.push()
+                        }
                     }
                 }
             }
         }
 
-        // Stage 4: Push to Docker Hub
-        stage('Push Image') {
+        // --- SERVICE 2: API GATEWAY ---
+        stage('Build API Gateway') {
             steps {
-                script {
-                    // Logs in, pushes, and logs out automatically
-                    docker.withRegistry('', REGISTRY_CRED) {
-                        docker.image("${DOCKER_IMAGE}:latest").push()
+                dir('api-gateway') {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean package -DskipTests'
+                    script {
+                        docker.withRegistry('', REGISTRY_CRED) {
+                            def img = docker.build("${DOCKER_HUB_USER}/api-gateway:latest")
+                            img.push()
+                        }
                     }
                 }
             }
         }
 
-    }
-    post {
-        success {
-            echo 'Build and Push Successful! Images are now in Docker Hub.'
+		// --- SERVICE 3: DISCOVERY SERVER ---
+        stage('Build Discovery Server') {
+            steps {
+                dir('discovery-server') {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean package -DskipTests'
+                    script {
+                        docker.withRegistry('', REGISTRY_CRED) {
+                            def img = docker.build("${DOCKER_HUB_USER}/discovery-server:latest")
+                            img.push()
+                        }
+                    }
+                }
+            }
         }
-        failure {
-            echo 'Something went wrong.'
+
+        // --- SERVICE 4: DATA COLLECTION ---
+        stage('Build Data Service') {
+            steps {
+                dir('data-collection-service') {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean package -DskipTests'
+                    script {
+                        docker.withRegistry('', REGISTRY_CRED) {
+                            def img = docker.build("${DOCKER_HUB_USER}/data-collection-service:latest")
+                            img.push()
+                        }
+                    }
+                }
+            }
+        }
+
+		// --- SERVICE 5: CREDIT SCORING ---
+        stage('Build Credit Service') {
+            steps {
+                dir('credit-scoring-service') {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean package -DskipTests'
+                    script {
+                        docker.withRegistry('', REGISTRY_CRED) {
+                            def img = docker.build("${DOCKER_HUB_USER}/credit-scoring-service:latest")
+                            img.push()
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- SERVICE 6: REPORT SERVICE ---
+        stage('Build Report Service') {
+            steps {
+                dir('report-service') {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean package -DskipTests'
+                    script {
+                        docker.withRegistry('', REGISTRY_CRED) {
+                            def img = docker.build("${DOCKER_HUB_USER}/report-service:latest")
+                            img.push()
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- DEPLOY STAGE ---
+        stage('Deploy to AWS') {
+            steps {
+                sshagent([AWS_CRED]) {
+                    // We use 'scp' (Secure Copy) to send the file from Jenkins to AWS
+                    sh "scp -o StrictHostKeyChecking=no docker-compose.prod.yml ubuntu@${EC2_IP}:/home/ubuntu/docker-compose.yml"
+					sh "scp -o StrictHostKeyChecking=no config-repo/promtail-config.yaml ubuntu@${EC2_IP}:/home/ubuntu/promtail-config.yaml"
+
+					// 2. SSH in and run Docker Compose
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} '
+                            # Export the variable so docker-compose can see it
+                            export DOCKER_USERNAME=${DOCKER_HUB_USER}
+
+                            # Pull the latest images for all services
+                            docker-compose pull
+
+                            docker-compose up -d --remove-orphans
+
+                            # Clean up old images to save disk space
+                            docker image prune -f
+                        '
+                    """
+                }
+            }
         }
     }
 }
