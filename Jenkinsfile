@@ -2,145 +2,135 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_USER = "your-dockerhub-username"
-        REGISTRY_CRED = "docker-hub-creds"
-        AWS_CRED = "ec2-ssh-key"
-        EC2_IP = "1.2.3.4"
-        // We need to pass the username to the docker-compose file on the server
         COMPOSE_PROJECT_NAME = "credit-score"
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        AWS_DEFAULT_REGION = credentials('aws-default-region')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/YOUR_USERNAME/CreditScoreAnalyzer.git'
+                cleanWs()
+                git branch: 'master', url: 'https://github.com/chaudhary-pc/CreditScoreAnalyzer.git'
             }
         }
 
-		// --- SERVICE 1: USER SERVICE ---
-        stage('Build User Service') {
+        stage('Login to ECR') {
             steps {
-                dir('user-service') {
-                    // 1. Compile Java
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
+                sh '''
+                    aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+                '''
+            }
+        }
 
-                    // 2. Build & Push Docker Image
-                    script {
-                        docker.withRegistry('', REGISTRY_CRED) {
-                            def img = docker.build("${DOCKER_HUB_USER}/user-service:latest")
-                            img.push()
+        stage('Build, Test & Push Images') {
+            failFast true
+            parallel {
+                stage('User Service') {
+                    steps {
+                        dir('user-service') {
+                            script {
+                                def imageTag = env.GIT_COMMIT.substring(0, 7)
+                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                                env.USER_SERVICE_IMAGE = "${repositoryUri}/user-service:${imageTag}"
+                                sh 'chmod +x mvnw'
+                                sh './mvnw clean package -DskipTests'
+                                def img = docker.build(env.USER_SERVICE_IMAGE, ".")
+                                img.push()
+                            }
+                        }
+                    }
+                }
+                stage('API Gateway') {
+                    steps {
+                        dir('api-gateway') {
+                            script {
+                                def imageTag = env.GIT_COMMIT.substring(0, 7)
+                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                                env.API_GATEWAY_IMAGE = "${repositoryUri}/api-gateway:${imageTag}"
+                                sh 'chmod +x mvnw'
+                                sh './mvnw clean package -DskipTests'
+                                def img = docker.build(env.API_GATEWAY_IMAGE, ".")
+                                img.push()
+                            }
+                        }
+                    }
+                }
+                stage('Discovery Server') {
+                    steps {
+                        dir('discovery-server') {
+                            script {
+                                def imageTag = env.GIT_COMMIT.substring(0, 7)
+                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                                env.DISCOVERY_SERVER_IMAGE = "${repositoryUri}/discovery-server:${imageTag}"
+                                sh 'chmod +x mvnw'
+                                sh './mvnw clean package -DskipTests'
+                                def img = docker.build(env.DISCOVERY_SERVER_IMAGE, ".")
+                                img.push()
+                            }
+                        }
+                    }
+                }
+                stage('Data Collection Service') {
+                    steps {
+                        dir('data-collection-service') {
+                            script {
+                                def imageTag = env.GIT_COMMIT.substring(0, 7)
+                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                                env.DATA_COLLECTION_SERVICE_IMAGE = "${repositoryUri}/data-collection-service:${imageTag}"
+                                sh 'chmod +x mvnw'
+                                sh './mvnw clean package -DskipTests'
+                                def img = docker.build(env.DATA_COLLECTION_SERVICE_IMAGE, ".")
+                                img.push()
+                            }
+                        }
+                    }
+                }
+                stage('Credit Scoring Service') {
+                    steps {
+                        dir('credit-scoring-service') {
+                            script {
+                                def imageTag = env.GIT_COMMIT.substring(0, 7)
+                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                                env.CREDIT_SCORING_SERVICE_IMAGE = "${repositoryUri}/credit-scoring-service:${imageTag}"
+                                sh 'chmod +x mvnw'
+                                sh './mvnw clean package -DskipTests'
+                                def img = docker.build(env.CREDIT_SCORING_SERVICE_IMAGE, ".")
+                                img.push()
+                            }
+                        }
+                    }
+                }
+                stage('Report Service') {
+                    steps {
+                        dir('report-service') {
+                            script {
+                                def imageTag = env.GIT_COMMIT.substring(0, 7)
+                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                                env.REPORT_SERVICE_IMAGE = "${repositoryUri}/report-service:${imageTag}"
+                                sh 'chmod +x mvnw'
+                                sh './mvnw clean package -DskipTests'
+                                def img = docker.build(env.REPORT_SERVICE_IMAGE, ".")
+                                img.push()
+                            }
                         }
                     }
                 }
             }
         }
 
-        // --- SERVICE 2: API GATEWAY ---
-        stage('Build API Gateway') {
+        stage('Deploy Services') {
             steps {
-                dir('api-gateway') {
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
-                    script {
-                        docker.withRegistry('', REGISTRY_CRED) {
-                            def img = docker.build("${DOCKER_HUB_USER}/api-gateway:latest")
-                            img.push()
-                        }
-                    }
-                }
+                sh """
+                    docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+                    docker image prune -f
+                """
             }
         }
-
-		// --- SERVICE 3: DISCOVERY SERVER ---
-        stage('Build Discovery Server') {
-            steps {
-                dir('discovery-server') {
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
-                    script {
-                        docker.withRegistry('', REGISTRY_CRED) {
-                            def img = docker.build("${DOCKER_HUB_USER}/discovery-server:latest")
-                            img.push()
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- SERVICE 4: DATA COLLECTION ---
-        stage('Build Data Service') {
-            steps {
-                dir('data-collection-service') {
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
-                    script {
-                        docker.withRegistry('', REGISTRY_CRED) {
-                            def img = docker.build("${DOCKER_HUB_USER}/data-collection-service:latest")
-                            img.push()
-                        }
-                    }
-                }
-            }
-        }
-
-		// --- SERVICE 5: CREDIT SCORING ---
-        stage('Build Credit Service') {
-            steps {
-                dir('credit-scoring-service') {
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
-                    script {
-                        docker.withRegistry('', REGISTRY_CRED) {
-                            def img = docker.build("${DOCKER_HUB_USER}/credit-scoring-service:latest")
-                            img.push()
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- SERVICE 6: REPORT SERVICE ---
-        stage('Build Report Service') {
-            steps {
-                dir('report-service') {
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
-                    script {
-                        docker.withRegistry('', REGISTRY_CRED) {
-                            def img = docker.build("${DOCKER_HUB_USER}/report-service:latest")
-                            img.push()
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- DEPLOY STAGE ---
-        stage('Deploy to AWS') {
-            steps {
-                sshagent([AWS_CRED]) {
-                    // We use 'scp' (Secure Copy) to send the file from Jenkins to AWS
-                    sh "scp -o StrictHostKeyChecking=no docker-compose.prod.yml ubuntu@${EC2_IP}:/home/ubuntu/docker-compose.yml"
-					sh "scp -o StrictHostKeyChecking=no config-repo/promtail-config.yaml ubuntu@${EC2_IP}:/home/ubuntu/promtail-config.yaml"
-
-					// 2. SSH in and run Docker Compose
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} '
-                            # Export the variable so docker-compose can see it
-                            export DOCKER_USERNAME=${DOCKER_HUB_USER}
-
-                            # Pull the latest images for all services
-                            docker-compose pull
-
-                            docker-compose up -d --remove-orphans
-
-                            # Clean up old images to save disk space
-                            docker image prune -f
-                        '
-                    """
-                }
-            }
+    }
+    post {
+        always {
+            cleanWs()
         }
     }
 }

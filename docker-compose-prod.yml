@@ -88,7 +88,7 @@ services:
 
   # --- Microservices ---
   discovery-server:
-    image: ${DOCKER_USERNAME}/discovery-server:latest
+    image: ${DISCOVERY_SERVER_IMAGE}
     container_name: discovery-server
     restart: always
     ports:
@@ -104,7 +104,7 @@ services:
       start_period: 30s
 
   api-gateway:
-    image: ${DOCKER_USERNAME}/api-gateway:latest
+    image: ${API_GATEWAY_IMAGE}
     container_name: api-gateway
     restart: always
     ports:
@@ -116,7 +116,7 @@ services:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
 
   user-service:
-    image: ${DOCKER_USERNAME}/user-service:latest
+    image: ${USER_SERVICE_IMAGE}
     container_name: user-service
     restart: always
     ports:
@@ -132,7 +132,7 @@ services:
       - JWT_SECRET_KEY=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
 
   data-collection-service:
-    image: ${DOCKER_USERNAME}/data-collection-service:latest
+    image: ${DATA_COLLECTION_SERVICE_IMAGE}
     container_name: data-collection-service
     restart: always
     ports:
@@ -150,7 +150,7 @@ services:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 
   credit-scoring-service:
-    image: ${DOCKER_USERNAME}/credit-scoring-service:latest
+    image: ${CREDIT_SCORING_SERVICE_IMAGE}
     container_name: credit-scoring-service
     restart: always
     ports:
@@ -174,7 +174,7 @@ services:
       - SYSTEM_PASSWORD=system-password-secure
 
   report-service:
-    image: ${DOCKER_USERNAME}/report-service:latest
+    image: ${REPORT_SERVICE_IMAGE}
     container_name: report-service
     restart: always
     ports:
