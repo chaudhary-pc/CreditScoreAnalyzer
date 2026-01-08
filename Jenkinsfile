@@ -17,103 +17,118 @@ pipeline {
 
         stage('Login to ECR') {
             steps {
-                sh '''
-                    aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
-                '''
+                // Securely bind credentials to shell environment variables
+                withCredentials([
+                    string(credentialsId: 'aws-account-id', variable: 'ECR_AWS_ACCOUNT_ID'),
+                    string(credentialsId: 'aws-default-region', variable: 'ECR_AWS_DEFAULT_REGION')
+                ]) {
+                    // Use single quotes and shell variables ($VAR) to prevent insecure Groovy interpolation
+                    sh '''
+                        aws ecr get-login-password --region $ECR_AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_AWS_ACCOUNT_ID.dkr.ecr.$ECR_AWS_DEFAULT_REGION.amazonaws.com
+                    '''
+                }
             }
         }
 
-        stage('Build, Test & Push Images') {
-            failFast true
-            parallel {
-                stage('User Service') {
-                    steps {
-                        dir('user-service') {
-                            script {
-                                def imageTag = env.GIT_COMMIT.substring(0, 7)
-                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
-                                env.USER_SERVICE_IMAGE = "${repositoryUri}/user-service:${imageTag}"
-                                sh 'chmod +x mvnw'
-                                sh './mvnw clean package -DskipTests'
-                                def img = docker.build(env.USER_SERVICE_IMAGE, ".")
-                                img.push()
-                            }
-                        }
+        // --- SEQUENTIAL BUILD STAGES ---
+
+        stage('Build User Service') {
+            steps {
+                dir('user-service') {
+                    script {
+                        def imageTag = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 7) : "build-${env.BUILD_NUMBER}"
+                        echo "Building User Service with tag: ${imageTag}"
+                        def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                        env.USER_SERVICE_IMAGE = "${repositoryUri}/user-service:${imageTag}"
+                        sh 'chmod +x mvnw'
+                        sh './mvnw clean package -DskipTests'
+                        def img = docker.build(env.USER_SERVICE_IMAGE, ".")
+                        img.push()
                     }
                 }
-                stage('API Gateway') {
-                    steps {
-                        dir('api-gateway') {
-                            script {
-                                def imageTag = env.GIT_COMMIT.substring(0, 7)
-                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
-                                env.API_GATEWAY_IMAGE = "${repositoryUri}/api-gateway:${imageTag}"
-                                sh 'chmod +x mvnw'
-                                sh './mvnw clean package -DskipTests'
-                                def img = docker.build(env.API_GATEWAY_IMAGE, ".")
-                                img.push()
-                            }
-                        }
+            }
+        }
+
+        stage('Build API Gateway') {
+            steps {
+                dir('api-gateway') {
+                    script {
+                        def imageTag = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 7) : "build-${env.BUILD_NUMBER}"
+                        echo "Building API Gateway with tag: ${imageTag}"
+                        def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                        env.API_GATEWAY_IMAGE = "${repositoryUri}/api-gateway:${imageTag}"
+                        sh 'chmod +x mvnw'
+                        sh './mvnw clean package -DskipTests'
+                        def img = docker.build(env.API_GATEWAY_IMAGE, ".")
+                        img.push()
                     }
                 }
-                stage('Discovery Server') {
-                    steps {
-                        dir('discovery-server') {
-                            script {
-                                def imageTag = env.GIT_COMMIT.substring(0, 7)
-                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
-                                env.DISCOVERY_SERVER_IMAGE = "${repositoryUri}/discovery-server:${imageTag}"
-                                sh 'chmod +x mvnw'
-                                sh './mvnw clean package -DskipTests'
-                                def img = docker.build(env.DISCOVERY_SERVER_IMAGE, ".")
-                                img.push()
-                            }
-                        }
+            }
+        }
+
+        stage('Build Discovery Server') {
+            steps {
+                dir('discovery-server') {
+                    script {
+                        def imageTag = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 7) : "build-${env.BUILD_NUMBER}"
+                        echo "Building Discovery Server with tag: ${imageTag}"
+                        def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                        env.DISCOVERY_SERVER_IMAGE = "${repositoryUri}/discovery-server:${imageTag}"
+                        sh 'chmod +x mvnw'
+                        sh './mvnw clean package -DskipTests'
+                        def img = docker.build(env.DISCOVERY_SERVER_IMAGE, ".")
+                        img.push()
                     }
                 }
-                stage('Data Collection Service') {
-                    steps {
-                        dir('data-collection-service') {
-                            script {
-                                def imageTag = env.GIT_COMMIT.substring(0, 7)
-                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
-                                env.DATA_COLLECTION_SERVICE_IMAGE = "${repositoryUri}/data-collection-service:${imageTag}"
-                                sh 'chmod +x mvnw'
-                                sh './mvnw clean package -DskipTests'
-                                def img = docker.build(env.DATA_COLLECTION_SERVICE_IMAGE, ".")
-                                img.push()
-                            }
-                        }
+            }
+        }
+
+        stage('Build Data Collection Service') {
+            steps {
+                dir('data-collection-service') {
+                    script {
+                        def imageTag = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 7) : "build-${env.BUILD_NUMBER}"
+                        echo "Building Data Collection Service with tag: ${imageTag}"
+                        def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                        env.DATA_COLLECTION_SERVICE_IMAGE = "${repositoryUri}/data-collection-service:${imageTag}"
+                        sh 'chmod +x mvnw'
+                        sh './mvnw clean package -DskipTests'
+                        def img = docker.build(env.DATA_COLLECTION_SERVICE_IMAGE, ".")
+                        img.push()
                     }
                 }
-                stage('Credit Scoring Service') {
-                    steps {
-                        dir('credit-scoring-service') {
-                            script {
-                                def imageTag = env.GIT_COMMIT.substring(0, 7)
-                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
-                                env.CREDIT_SCORING_SERVICE_IMAGE = "${repositoryUri}/credit-scoring-service:${imageTag}"
-                                sh 'chmod +x mvnw'
-                                sh './mvnw clean package -DskipTests'
-                                def img = docker.build(env.CREDIT_SCORING_SERVICE_IMAGE, ".")
-                                img.push()
-                            }
-                        }
+            }
+        }
+
+        stage('Build Credit Scoring Service') {
+            steps {
+                dir('credit-scoring-service') {
+                    script {
+                        def imageTag = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 7) : "build-${env.BUILD_NUMBER}"
+                        echo "Building Credit Scoring Service with tag: ${imageTag}"
+                        def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                        env.CREDIT_SCORING_SERVICE_IMAGE = "${repositoryUri}/credit-scoring-service:${imageTag}"
+                        sh 'chmod +x mvnw'
+                        sh './mvnw clean package -DskipTests'
+                        def img = docker.build(env.CREDIT_SCORING_SERVICE_IMAGE, ".")
+                        img.push()
                     }
                 }
-                stage('Report Service') {
-                    steps {
-                        dir('report-service') {
-                            script {
-                                def imageTag = env.GIT_COMMIT.substring(0, 7)
-                                def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
-                                env.REPORT_SERVICE_IMAGE = "${repositoryUri}/report-service:${imageTag}"
-                                sh 'chmod +x mvnw'
-                                sh './mvnw clean package -DskipTests'
-                                def img = docker.build(env.REPORT_SERVICE_IMAGE, ".")
-                                img.push()
-                            }
-                        }
+            }
+        }
+
+        stage('Build Report Service') {
+            steps {
+                dir('report-service') {
+                    script {
+                        def imageTag = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 7) : "build-${env.BUILD_NUMBER}"
+                        echo "Building Report Service with tag: ${imageTag}"
+                        def repositoryUri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_DEFAULT_REGION}.amazonaws.com"
+                        env.REPORT_SERVICE_IMAGE = "${repositoryUri}/report-service:${imageTag}"
+                        sh 'chmod +x mvnw'
+                        sh './mvnw clean package -DskipTests'
+                        def img = docker.build(env.REPORT_SERVICE_IMAGE, ".")
+                        img.push()
                     }
                 }
             }
