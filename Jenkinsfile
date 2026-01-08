@@ -140,7 +140,7 @@ pipeline {
                      echo "--- Listing current directory contents ---"
                      ls -la
                      echo "----------------------------------------"
-                    docker compose -f docker-compose.prod.yml up -d --remove-orphans
+                    docker compose -f docker-compose-prod.yml up -d --remove-orphans
                     docker image prune -f
                 """
             }
