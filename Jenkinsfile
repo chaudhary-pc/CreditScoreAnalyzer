@@ -139,7 +139,7 @@ pipeline {
                 // Change into the repository directory before running docker compose
                 dir('CreditScoreAnalyzer') {
                     sh """
-                        docker-compose -f docker-compose-prod.yml up -d --remove-orphans
+                        docker compose -f docker-compose-prod.yml up -d --remove-orphans
                         docker image prune -f
                     """
                 }
