@@ -136,15 +136,13 @@ pipeline {
 
         stage('Deploy Services') {
             steps {
-                // Change into the repository directory before running docker compose
-                dir('CreditScoreAnalyzer') {
-                    sh """
-                        echo "Listing all files inside this repo..........."
-                        ls -la
-                        docker compose -f docker-compose-prod.yml up -d --remove-orphans
-                        docker image prune -f
-                    """
-                }
+                sh """
+                    echo "Listing all files inside this repo..........."
+                    ls -la
+                    docker compose -f docker-compose-prod.yml up -d --remove-orphans
+                    docker image prune -f
+                """
+                
             }
         }
     }
